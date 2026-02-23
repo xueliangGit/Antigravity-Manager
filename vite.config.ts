@@ -7,11 +7,11 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  // Add a legacy build to support older WebKit/Safari used by some macOS versions
-  // This generates an additional legacy bundle with necessary polyfills.
-  build: {
-    target: "es2018",
-  },
+  // Use relative base so assets load correctly when served from file:// in Tauri bundles
+  base: './',
+
+  // Add a legacy build to support older WebKit/Safari used by some macOS versions.
+  // Configure legacy plugin `targets` explicitly (it overrides build.target).
   plugins: [react(), legacy({ targets: ["defaults", "not IE 11"] })],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
