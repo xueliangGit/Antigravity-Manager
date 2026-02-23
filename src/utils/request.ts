@@ -1,5 +1,7 @@
 // 探测环境
 const isTauri = typeof window !== 'undefined' && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__);
+// 静态引入 Tauri invoke，避免使用动态 import()
+import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 
 // 命令到 API 的映射
 const COMMAND_MAPPING: Record<string, { url: string; method: 'GET' | 'POST' | 'DELETE' | 'PATCH' }> = {
@@ -165,8 +167,7 @@ export async function request<T>(cmd: string, args?: any): Promise<T> {
   // 1. Tauri 环境：直接使用 invoke ...
   if (isTauri) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<T>(cmd, args);
+      return await tauriInvoke<T>(cmd, args);
     } catch (error) {
       console.error(`Tauri Invoke Error [${cmd}]:`, error);
       throw error;

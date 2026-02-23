@@ -1,11 +1,11 @@
-import React, { useState, Suspense, useRef, useEffect } from 'react';
+import  { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LogoIcon from '../../../src-tauri/icons/icon.png';
 
 // [SPRING_FESTIVAL_START]
-// 懒加载彩蛋组件，避免影响首屏性能
-const SpringFestivalEffect = React.lazy(() => import('../effects/SpringFestivalEffect'));
+// 直接同步导入彩蛋组件以避免在老旧 WebKit 中使用动态 import()
+import SpringFestivalEffect from '../effects/SpringFestivalEffect';
 import { LanternSwitch } from '../effects/LanternSwitch';
 // [SPRING_FESTIVAL_END]
 
@@ -76,9 +76,7 @@ export function NavLogo() {
 
             {/* [SPRING_FESTIVAL_START] */}
             {showEasterEgg && (
-                <Suspense fallback={null}>
-                    <SpringFestivalEffect onClose={() => setShowEasterEgg(false)} />
-                </Suspense>
+                <SpringFestivalEffect onClose={() => setShowEasterEgg(false)} />
             )}
             {/* [SPRING_FESTIVAL_END] */}
         </Link>

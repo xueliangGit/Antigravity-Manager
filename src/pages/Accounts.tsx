@@ -29,6 +29,9 @@ import { Account } from "../types/account";
 import { cn } from "../utils/cn";
 import { isTauri } from "../utils/env";
 import { request as invoke } from "../utils/request";
+import { allSettled, supportsResizeObserver } from "../utils/polyfills";
+import { join } from '@tauri-apps/api/path';
+import { save as tauriSave, open as tauriOpen } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from "react-i18next";
 
 type FilterType = "all" | "pro" | "ultra" | "free";
@@ -119,17 +122,12 @@ function Accounts() {
       if (isBatch) {
         const ids = Array.from(selectedIds);
         setRefreshingIds(new Set(ids));
-        const results = await Promise.allSettled(
-          ids.map((id) => warmUpAccount(id)),
-        );
+        const results = await allSettled(ids.map((id) => warmUpAccount(id)));
         let successCount = 0;
         results.forEach((r) => {
           if (r.status === "fulfilled") successCount++;
         });
-        showToast(
-          t("accounts.warmup_batch_triggered", { count: successCount }),
-          "success",
-        );
+        showToast(t("accounts.warmup_batch_triggered", { count: successCount }), "success");
       } else {
         const msg = await warmUpAccounts();
         if (msg) {
@@ -155,16 +153,28 @@ function Accounts() {
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (let entry of entries) {
-        setContainerSize({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
-      }
-    });
-    resizeObserver.observe(containerRef.current);
-    return () => resizeObserver.disconnect();
+    if (supportsResizeObserver()) {
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (let entry of entries) {
+          setContainerSize({
+            width: entry.contentRect.width,
+            height: entry.contentRect.height,
+          });
+        }
+      });
+      resizeObserver.observe(containerRef.current);
+      return () => resizeObserver.disconnect();
+    } else {
+      // Fallback: approximate using window resize events when ResizeObserver not available
+      const update = () => {
+        const el = containerRef.current as HTMLElement | null;
+        if (!el) return;
+        setContainerSize({ width: el.clientWidth, height: el.clientHeight });
+      };
+      update();
+      window.addEventListener("resize", update);
+      return () => window.removeEventListener("resize", update);
+    }
   }, []);
 
   // Pagination State
@@ -479,7 +489,7 @@ function Accounts() {
         const ids = Array.from(selectedIds);
         setRefreshingIds(new Set(ids));
 
-        const results = await Promise.allSettled(
+        const results = await allSettled(
           ids.map((id) => refreshQuota(id)),
         );
 
@@ -551,15 +561,12 @@ function Accounts() {
       // 2. Determine Path & Export
       if (isTauri()) {
         let path: string | null = null;
-        const { join } = await import("@tauri-apps/api/path");
-
         if (config?.default_export_path) {
           // Use default path
           path = await join(config.default_export_path, fileName);
         } else {
           // Use Native Dialog
-          const { save } = await import("@tauri-apps/plugin-dialog");
-          path = await save({
+          path = await tauriSave({
             filters: [
               {
                 name: "JSON",
@@ -678,8 +685,7 @@ function Accounts() {
   const handleImportJson = async () => {
     if (isTauri()) {
       try {
-        const { open } = await import("@tauri-apps/plugin-dialog");
-        const selected = await open({
+        const selected = await tauriOpen({
           multiple: false,
           filters: [
             {

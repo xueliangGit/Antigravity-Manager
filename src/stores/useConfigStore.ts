@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { AppConfig } from '../types/config';
 import * as configService from '../services/configService';
+import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 
 interface ConfigState {
     config: AppConfig | null;
@@ -41,8 +42,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
             set({ config, loading: false });
             const { isTauri } = await import('../utils/env');
             if (isTauri()) {
-                const { invoke } = await import('@tauri-apps/api/core');
-                await invoke('set_window_theme', { theme: config.theme }).catch(() => {
+                await tauriInvoke('set_window_theme', { theme: config.theme }).catch(() => {
                 });
             }
         } catch (error) {
