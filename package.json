@@ -13,7 +13,7 @@
     "headless:dev": "npm run build && cd src-tauri && cargo run",
     "headless:quick": "cd src-tauri && cargo run --release",
     "build:headless": "npm run build && cd src-tauri && cargo build --release",
-    "build:headless:mac": "tauri build --bundles app"
+    "build:headless:mac": "tauri build --bundles app,dmg "
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
