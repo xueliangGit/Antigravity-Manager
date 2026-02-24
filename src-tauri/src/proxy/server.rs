@@ -49,10 +49,7 @@ pub fn trigger_account_reload(account_id: &str) {
 pub fn trigger_account_delete(account_id: &str) {
     if let Ok(mut pending) = get_pending_delete_accounts().write() {
         pending.insert(account_id.to_string());
-        tracing::debug!(
-            "[Proxy] Queued account {} for cache removal",
-            account_id
-        );
+        tracing::debug!("[Proxy] Queued account {} for cache removal", account_id);
     }
 }
 
@@ -311,10 +308,11 @@ impl AxumServer {
         let custom_mapping_state = Arc::new(tokio::sync::RwLock::new(custom_mapping));
         let proxy_state = Arc::new(tokio::sync::RwLock::new(upstream_proxy.clone()));
         let proxy_pool_state = Arc::new(tokio::sync::RwLock::new(proxy_pool_config));
-        let proxy_pool_manager = crate::proxy::proxy_pool::init_global_proxy_pool(proxy_pool_state.clone());
-    
-    // Start health check loop
-    proxy_pool_manager.clone().start_health_check_loop();
+        let proxy_pool_manager =
+            crate::proxy::proxy_pool::init_global_proxy_pool(proxy_pool_state.clone());
+
+        // Start health check loop
+        proxy_pool_manager.clone().start_health_check_loop();
         let security_state = Arc::new(RwLock::new(security_config));
         let zai_state = Arc::new(RwLock::new(zai_config));
         let provider_rr = Arc::new(AtomicUsize::new(0));
@@ -506,11 +504,20 @@ impl AxumServer {
             .route("/proxy/cli/sync", post(admin_execute_cli_sync))
             .route("/proxy/cli/restore", post(admin_execute_cli_restore))
             .route("/proxy/cli/config", post(admin_get_cli_config_content))
-            .route("/proxy/opencode/status", post(admin_get_opencode_sync_status))
+            .route(
+                "/proxy/opencode/status",
+                post(admin_get_opencode_sync_status),
+            )
             .route("/proxy/opencode/sync", post(admin_execute_opencode_sync))
-            .route("/proxy/opencode/restore", post(admin_execute_opencode_restore))
+            .route(
+                "/proxy/opencode/restore",
+                post(admin_execute_opencode_restore),
+            )
             .route("/proxy/opencode/clear", post(admin_execute_opencode_clear))
-            .route("/proxy/opencode/config", post(admin_get_opencode_config_content))
+            .route(
+                "/proxy/opencode/config",
+                post(admin_get_opencode_config_content),
+            )
             .route("/proxy/droid/status", post(admin_get_droid_sync_status))
             .route("/proxy/droid/sync", post(admin_execute_droid_sync))
             .route("/proxy/droid/restore", post(admin_execute_droid_restore))
@@ -520,8 +527,14 @@ impl AxumServer {
             .route("/proxy/pool/bindings", get(admin_get_all_account_bindings))
             .route("/proxy/pool/bind", post(admin_bind_account_proxy))
             .route("/proxy/pool/unbind", post(admin_unbind_account_proxy))
-            .route("/proxy/pool/binding/:accountId", get(admin_get_account_proxy_binding))
-            .route("/proxy/health-check/trigger", post(admin_trigger_proxy_health_check))
+            .route(
+                "/proxy/pool/binding/:accountId",
+                get(admin_get_account_proxy_binding),
+            )
+            .route(
+                "/proxy/health-check/trigger",
+                post(admin_trigger_proxy_health_check),
+            )
             .route("/proxy/start", post(admin_start_proxy_service))
             .route("/proxy/stop", post(admin_stop_proxy_service))
             .route("/proxy/mapping", post(admin_update_model_mapping))
@@ -638,18 +651,43 @@ impl AxumServer {
             .route("/security/logs/clear", post(admin_clear_ip_access_logs))
             .route("/security/stats", get(admin_get_ip_stats))
             .route("/security/token-stats", get(admin_get_ip_token_stats)) // For IP Token usage
-            .route("/security/blacklist", get(admin_get_ip_blacklist).post(admin_add_ip_to_blacklist).delete(admin_remove_ip_from_blacklist))
+            .route(
+                "/security/blacklist",
+                get(admin_get_ip_blacklist)
+                    .post(admin_add_ip_to_blacklist)
+                    .delete(admin_remove_ip_from_blacklist),
+            )
             .route("/security/blacklist/clear", post(admin_clear_ip_blacklist))
-            .route("/security/blacklist/check", get(admin_check_ip_in_blacklist))
-            .route("/security/whitelist", get(admin_get_ip_whitelist).post(admin_add_ip_to_whitelist).delete(admin_remove_ip_from_whitelist))
+            .route(
+                "/security/blacklist/check",
+                get(admin_check_ip_in_blacklist),
+            )
+            .route(
+                "/security/whitelist",
+                get(admin_get_ip_whitelist)
+                    .post(admin_add_ip_to_whitelist)
+                    .delete(admin_remove_ip_from_whitelist),
+            )
             .route("/security/whitelist/clear", post(admin_clear_ip_whitelist))
-            .route("/security/whitelist/check", get(admin_check_ip_in_whitelist))
-            .route("/security/config", get(admin_get_security_config).post(admin_update_security_config))
+            .route(
+                "/security/whitelist/check",
+                get(admin_check_ip_in_whitelist),
+            )
+            .route(
+                "/security/config",
+                get(admin_get_security_config).post(admin_update_security_config),
+            )
             // User Tokens
-            .route("/user-tokens", get(admin_list_user_tokens).post(admin_create_user_token))
+            .route(
+                "/user-tokens",
+                get(admin_list_user_tokens).post(admin_create_user_token),
+            )
             .route("/user-tokens/summary", get(admin_get_user_token_summary))
             .route("/user-tokens/:id/renew", post(admin_renew_user_token))
-            .route("/user-tokens/:id", delete(admin_delete_user_token).patch(admin_update_user_token))
+            .route(
+                "/user-tokens/:id",
+                delete(admin_delete_user_token).patch(admin_update_user_token),
+            )
             // OAuth (Web) - Admin 接口
             .route("/auth/url", get(admin_prepare_oauth_url_web))
             // 应用管理特定鉴权层 (强制校验)
@@ -682,12 +720,32 @@ impl AxumServer {
 
         // 静态文件托管 (用于 Headless/Docker 模式)
         let dist_path = std::env::var("ABV_DIST_PATH").unwrap_or_else(|_| "dist".to_string());
-        let app = if std::path::Path::new(&dist_path).exists() {
-            tracing::info!("正在托管静态资源: {}", dist_path);
-            app.fallback_service(tower_http::services::ServeDir::new(&dist_path).fallback(
-                tower_http::services::ServeFile::new(format!("{}/index.html", dist_path)),
-            ))
+        let dist_path_obj = std::path::Path::new(&dist_path);
+
+        let app = if dist_path_obj.exists() {
+            if dist_path_obj.is_dir() {
+                let index_path = dist_path_obj.join("index.html");
+                if index_path.exists() {
+                    tracing::info!("正在托管静态资源: {}", dist_path);
+                    tracing::info!("静态资源入口文件: {:?}", index_path);
+
+                    // 使用 ServeDir 托管静态文件，支持 SPA 路由
+                    app.fallback_service(
+                        tower_http::services::ServeDir::new(&dist_path)
+                            // 对于 SPA，所有未匹配的路由都返回 index.html
+                            .fallback(tower_http::services::ServeFile::new(index_path)),
+                    )
+                } else {
+                    tracing::warn!("静态资源目录存在但缺少 index.html: {}", dist_path);
+                    app
+                }
+            } else {
+                tracing::warn!("指定的静态资源路径不是目录: {}", dist_path);
+                app
+            }
         } else {
+            tracing::warn!("静态资源目录不存在: {}", dist_path);
+            tracing::warn!("请确保已构建前端应用或设置正确的 ABV_DIST_PATH 环境变量");
             app
         };
 
@@ -730,7 +788,7 @@ impl AxumServer {
                         match res {
                             Ok((stream, remote_addr)) => {
                                 let io = TokioIo::new(stream);
-                                
+
                                 // 注入 ConnectInfo (用于获取真实 IP)
                                 use tower::ServiceExt;
                                 use hyper::body::Incoming;
@@ -1340,10 +1398,16 @@ async fn admin_bind_account_proxy(
     State(state): State<AppState>,
     Json(payload): Json<BindAccountProxyRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    state.proxy_pool_manager
+    state
+        .proxy_pool_manager
         .bind_account_to_proxy(payload.account_id, payload.proxy_id)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(StatusCode::OK)
 }
 
@@ -1358,7 +1422,10 @@ async fn admin_unbind_account_proxy(
     State(state): State<AppState>,
     Json(payload): Json<UnbindAccountProxyRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    state.proxy_pool_manager.unbind_account_proxy(payload.account_id).await;
+    state
+        .proxy_pool_manager
+        .unbind_account_proxy(payload.account_id)
+        .await;
     Ok(StatusCode::OK)
 }
 
@@ -1728,34 +1795,41 @@ async fn admin_get_data_dir_path() -> impl IntoResponse {
 // --- User Token Handlers ---
 
 async fn admin_list_user_tokens() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let tokens = crate::commands::user_token::list_user_tokens().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        )
-    })?;
+    let tokens = crate::commands::user_token::list_user_tokens()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(Json(tokens))
 }
 
-async fn admin_get_user_token_summary() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let summary = crate::commands::user_token::get_user_token_summary().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        )
-    })?;
+async fn admin_get_user_token_summary(
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let summary = crate::commands::user_token::get_user_token_summary()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(Json(summary))
 }
 
 async fn admin_create_user_token(
     Json(payload): Json<crate::commands::user_token::CreateTokenRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let token = crate::commands::user_token::create_user_token(payload).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        )
-    })?;
+    let token = crate::commands::user_token::create_user_token(payload)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(Json(token))
 }
 
@@ -1769,24 +1843,28 @@ async fn admin_renew_user_token(
     Path(id): Path<String>,
     Json(payload): Json<RenewTokenRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    crate::commands::user_token::renew_user_token(id, payload.expires_type).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        )
-    })?;
+    crate::commands::user_token::renew_user_token(id, payload.expires_type)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(StatusCode::OK)
 }
 
 async fn admin_delete_user_token(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    crate::commands::user_token::delete_user_token(id).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        )
-    })?;
+    crate::commands::user_token::delete_user_token(id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1794,12 +1872,14 @@ async fn admin_update_user_token(
     Path(id): Path<String>,
     Json(payload): Json<crate::commands::user_token::UpdateTokenRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    crate::commands::user_token::update_user_token(id, payload).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        )
-    })?;
+    crate::commands::user_token::update_user_token(id, payload)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(StatusCode::OK)
 }
 
@@ -1841,12 +1921,14 @@ async fn admin_get_antigravity_args() -> Result<impl IntoResponse, (StatusCode, 
 
 async fn admin_clear_antigravity_cache(
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let res = crate::commands::clear_antigravity_cache().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        )
-    })?;
+    let res = crate::commands::clear_antigravity_cache()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(Json(res))
 }
 
@@ -2313,7 +2395,6 @@ async fn admin_warm_up_account(
     Ok(Json(result))
 }
 
-
 async fn admin_save_http_api_settings(
     Json(payload): Json<crate::modules::http_api::HttpApiSettings>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -2543,11 +2624,11 @@ async fn admin_bind_device_profile_with_profile(
     } else {
         &account_id
     };
-    
+
     let profile: crate::models::account::DeviceProfile = payload.profile_wrapper.into();
-    
-    let result =
-        account::bind_device_profile_with_profile(target_account_id, profile, None).map_err(|e| {
+
+    let result = account::bind_device_profile_with_profile(target_account_id, profile, None)
+        .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse { error: e }),
@@ -2772,15 +2853,20 @@ struct CliSyncRequest {
 async fn admin_execute_cli_sync(
     Json(payload): Json<CliSyncRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    crate::proxy::cli_sync::execute_cli_sync(payload.app_type, payload.proxy_url, payload.api_key, payload.model)
-        .await
-        .map(|_| StatusCode::OK)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse { error: e }),
-            )
-        })
+    crate::proxy::cli_sync::execute_cli_sync(
+        payload.app_type,
+        payload.proxy_url,
+        payload.api_key,
+        payload.model,
+    )
+    .await
+    .map(|_| StatusCode::OK)
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })
 }
 
 #[derive(Deserialize)]
@@ -3069,8 +3155,12 @@ struct IpAccessLogQuery {
     blocked_only: bool,
 }
 
-fn default_page() -> usize { 1 }
-fn default_page_size() -> usize { 50 }
+fn default_page() -> usize {
+    1
+}
+fn default_page_size() -> usize {
+    50
+}
 
 #[derive(Serialize)]
 struct IpAccessLogResponse {
@@ -3082,21 +3172,28 @@ async fn admin_get_ip_access_logs(
     Query(q): Query<IpAccessLogQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let offset = (q.page.max(1) - 1) * q.page_size;
-    let logs = security_db::get_ip_access_logs(
-        q.page_size,
-        offset,
-        q.search.as_deref(),
-        q.blocked_only,
-    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    let logs =
+        security_db::get_ip_access_logs(q.page_size, offset, q.search.as_deref(), q.blocked_only)
+            .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
 
     let total = logs.len(); // Simple total
-    
+
     Ok(Json(IpAccessLogResponse { logs, total }))
 }
 
-async fn admin_clear_ip_access_logs() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    security_db::clear_ip_access_logs()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+async fn admin_clear_ip_access_logs() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)>
+{
+    security_db::clear_ip_access_logs().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
     Ok(StatusCode::OK)
 }
 
@@ -3109,10 +3206,18 @@ struct IpStatsResponse {
 }
 
 async fn admin_get_ip_stats() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = security_db::get_ip_stats()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    let top_ips = security_db::get_top_ips(10, 24)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    let stats = security_db::get_ip_stats().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
+    let top_ips = security_db::get_top_ips(10, 24).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
 
     let response = IpStatsResponse {
         total_requests: stats.total_requests as usize,
@@ -3132,16 +3237,23 @@ struct IpTokenStatsQuery {
 async fn admin_get_ip_token_stats(
     Query(q): Query<IpTokenStatsQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = proxy_db::get_token_usage_by_ip(
-        q.limit.unwrap_or(100),
-        q.hours.unwrap_or(720)
-    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    let stats = proxy_db::get_token_usage_by_ip(q.limit.unwrap_or(100), q.hours.unwrap_or(720))
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     Ok(Json(stats))
 }
 
 async fn admin_get_ip_blacklist() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let list = security_db::get_blacklist()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    let list = security_db::get_blacklist().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
     Ok(Json(list))
 }
 
@@ -3161,7 +3273,13 @@ async fn admin_add_ip_to_blacklist(
         req.reason.as_deref(),
         req.expires_at,
         "manual",
-    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    )
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
 
     Ok(StatusCode::CREATED)
 }
@@ -3175,25 +3293,47 @@ struct RemoveIpRequest {
 async fn admin_remove_ip_from_blacklist(
     Query(q): Query<RemoveIpRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let entries = security_db::get_blacklist()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    
+    let entries = security_db::get_blacklist().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
+
     if let Some(entry) = entries.iter().find(|e| e.ip_pattern == q.ip_pattern) {
-        security_db::remove_from_blacklist(&entry.id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+        security_db::remove_from_blacklist(&entry.id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     } else {
-        return Err((StatusCode::NOT_FOUND, Json(ErrorResponse { error: format!("IP pattern {} not found", q.ip_pattern) })));
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("IP pattern {} not found", q.ip_pattern),
+            }),
+        ));
     }
-    
+
     Ok(StatusCode::OK)
 }
 
-async fn admin_clear_ip_blacklist() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let entries = security_db::get_blacklist()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+async fn admin_clear_ip_blacklist() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)>
+{
+    let entries = security_db::get_blacklist().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
     for entry in entries {
-        security_db::remove_from_blacklist(&entry.id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+        security_db::remove_from_blacklist(&entry.id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     }
     Ok(StatusCode::OK)
 }
@@ -3207,14 +3347,22 @@ struct CheckIpQuery {
 async fn admin_check_ip_in_blacklist(
     Query(q): Query<CheckIpQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let result = security_db::is_ip_in_blacklist(&q.ip)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    let result = security_db::is_ip_in_blacklist(&q.ip).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
     Ok(Json(serde_json::json!({ "result": result })))
 }
 
 async fn admin_get_ip_whitelist() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let list = security_db::get_whitelist()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    let list = security_db::get_whitelist().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
     Ok(Json(list))
 }
 
@@ -3228,34 +3376,58 @@ struct AddWhitelistRequest {
 async fn admin_add_ip_to_whitelist(
     Json(req): Json<AddWhitelistRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    security_db::add_to_whitelist(
-        &req.ip_pattern,
-        req.description.as_deref(),
-    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    security_db::add_to_whitelist(&req.ip_pattern, req.description.as_deref()).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
     Ok(StatusCode::CREATED)
 }
 
 async fn admin_remove_ip_from_whitelist(
     Query(q): Query<RemoveIpRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let entries = security_db::get_whitelist()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    
+    let entries = security_db::get_whitelist().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
+
     if let Some(entry) = entries.iter().find(|e| e.ip_pattern == q.ip_pattern) {
-        security_db::remove_from_whitelist(&entry.id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+        security_db::remove_from_whitelist(&entry.id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     } else {
-        return Err((StatusCode::NOT_FOUND, Json(ErrorResponse { error: format!("IP pattern {} not found", q.ip_pattern) })));
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("IP pattern {} not found", q.ip_pattern),
+            }),
+        ));
     }
     Ok(StatusCode::OK)
 }
 
-async fn admin_clear_ip_whitelist() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let entries = security_db::get_whitelist()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+async fn admin_clear_ip_whitelist() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)>
+{
+    let entries = security_db::get_whitelist().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
     for entry in entries {
-        security_db::remove_from_whitelist(&entry.ip_pattern)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+        security_db::remove_from_whitelist(&entry.ip_pattern).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
     }
     Ok(StatusCode::OK)
 }
@@ -3263,17 +3435,27 @@ async fn admin_clear_ip_whitelist() -> Result<impl IntoResponse, (StatusCode, Js
 async fn admin_check_ip_in_whitelist(
     Query(q): Query<CheckIpQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let result = security_db::is_ip_in_whitelist(&q.ip)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+    let result = security_db::is_ip_in_whitelist(&q.ip).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
     Ok(Json(serde_json::json!({ "result": result })))
 }
 
 async fn admin_get_security_config(
     State(_state): State<AppState>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let app_config = crate::modules::config::load_app_config()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() })))?;
-    
+    let app_config = crate::modules::config::load_app_config().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )
+    })?;
+
     Ok(Json(app_config.proxy.security_monitor))
 }
 
@@ -3287,13 +3469,25 @@ async fn admin_update_security_config(
     Json(payload): Json<UpdateSecurityConfigWrapper>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let config = payload.config;
-    let mut app_config = crate::modules::config::load_app_config()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() })))?;
-        
+    let mut app_config = crate::modules::config::load_app_config().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )
+    })?;
+
     app_config.proxy.security_monitor = config.clone();
-    
-    crate::modules::config::save_app_config(&app_config)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() })))?;
+
+    crate::modules::config::save_app_config(&app_config).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )
+    })?;
 
     {
         let mut sec = state.security.write().await;
@@ -3402,17 +3596,25 @@ async fn admin_get_opencode_config_content(
     Json(payload): Json<GetOpencodeConfigRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let file_name = payload.file_name;
-    tokio::task::spawn_blocking(move || crate::proxy::opencode_sync::read_opencode_config_content(file_name))
-        .await
-        .map_err(|e| (
+    tokio::task::spawn_blocking(move || {
+        crate::proxy::opencode_sync::read_opencode_config_content(file_name)
+    })
+    .await
+    .map_err(|e| {
+        (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e.to_string() }),
-        ))?
-        .map(Json)
-        .map_err(|e| (
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )
+    })?
+    .map(Json)
+    .map_err(|e| {
+        (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse { error: e }),
-        ))
+        )
+    })
 }
 
 #[derive(Deserialize)]
@@ -3428,10 +3630,12 @@ async fn admin_execute_opencode_clear(
     crate::proxy::opencode_sync::execute_opencode_clear(payload.proxy_url, payload.clear_legacy)
         .await
         .map(|_| StatusCode::OK)
-        .map_err(|e| (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        ))
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })
 }
 
 // ── Droid (Factory CLI) Sync Admin Handlers ──
@@ -3448,10 +3652,12 @@ async fn admin_get_droid_sync_status(
     crate::proxy::droid_sync::get_droid_sync_status(payload.proxy_url)
         .await
         .map(Json)
-        .map_err(|e| (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        ))
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })
 }
 
 #[derive(Deserialize)]
@@ -3463,15 +3669,15 @@ struct DroidSyncRequest {
 async fn admin_execute_droid_sync(
     Json(payload): Json<DroidSyncRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    crate::proxy::droid_sync::execute_droid_sync(
-        payload.custom_models,
-    )
+    crate::proxy::droid_sync::execute_droid_sync(payload.custom_models)
         .await
         .map(|count| Json(serde_json::json!({ "added": count })))
-        .map_err(|e| (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        ))
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })
 }
 
 async fn admin_execute_droid_restore(
@@ -3479,10 +3685,12 @@ async fn admin_execute_droid_restore(
     crate::proxy::droid_sync::execute_droid_restore()
         .await
         .map(|_| StatusCode::OK)
-        .map_err(|e| (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        ))
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })
 }
 
 async fn admin_get_droid_config_content(
@@ -3490,8 +3698,10 @@ async fn admin_get_droid_config_content(
     crate::proxy::droid_sync::get_droid_config_content()
         .await
         .map(Json)
-        .map_err(|e| (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        ))
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })
 }
