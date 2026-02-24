@@ -107,9 +107,9 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Check for headless mode
+    // Check for headless mode (default to headless for this branch)
     let args: Vec<String> = std::env::args().collect();
-    let is_headless = args.iter().any(|arg| arg == "--headless");
+    let is_headless = !args.iter().any(|arg| arg == "--gui");
 
     // Increase file descriptor limit (macOS only)
     #[cfg(target_os = "macos")]
@@ -138,155 +138,193 @@ pub fn run() {
 
     if is_headless {
         info!("Starting in HEADLESS mode...");
-
-        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
-        rt.block_on(async {
-            // Initialize states manually
-            // [FIX] Initialize log bridge for headless mode
-            // Pass a dummy app handle or None since we don't have a Tauri app handle in headless mode
-            // Actually log_bridge relies on AppHandle to emit events.
-            // In headless mode, we don't emit events, but we still need the buffer.
-            // We need to modify log_bridge to handle missing AppHandle gracefully, which it already does (Option).
-            // But init_log_bridge requires AppHandle.
-            // We'll skip passing AppHandle for now and just leverage the global buffer capability.
-            // Since init_log_bridge takes AppHandle, we might need a separate init for headless or just not call init and rely on lazy init of buffer?
-            // Checking log_bridge code again...
-            // "static LOG_BUFFER: OnceLock<...> = OnceLock::new();" -> lazy init.
-            // So we just need to ensure the tracing layer is added.
-            // And `logger::init_logger()` adds the layer?
-            // Let's check `modules::logger`.
-
-            let proxy_state = commands::proxy::ProxyServiceState::new();
-            let cf_state = Arc::new(commands::cloudflared::CloudflaredState::new());
-
-            // Load config
-            match modules::config::load_app_config() {
-                Ok(mut config) => {
-                    let mut modified = false;
-                    // Headless/docker 默认允许 LAN 访问（绑定 0.0.0.0）
-                    // 若设置 ABV_BIND_LOCAL_ONLY，则仅绑定 127.0.0.1
-                    let bind_local_only = std::env::var("ABV_BIND_LOCAL_ONLY")
-                        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
-                        .unwrap_or(false);
-                    if bind_local_only {
-                        config.proxy.allow_lan_access = false;
-                        modified = true;
-                    } else {
-                        config.proxy.allow_lan_access = true;
-                    }
-
-                    // [FIX] Force auth mode to AllExceptHealth in headless mode if it's Off or Auto
-                    // This ensures Web UI login validation works properly
-                    if matches!(config.proxy.auth_mode, crate::proxy::ProxyAuthMode::Off | crate::proxy::ProxyAuthMode::Auto) {
-                        info!("Headless mode: Forcing auth_mode to AllExceptHealth for Web UI security");
-                        config.proxy.auth_mode = crate::proxy::ProxyAuthMode::AllExceptHealth;
-                        modified = true;
-                    }
-
-                    // [NEW] 支持通过环境变量注入 API Key
-                    // 优先级：ABV_API_KEY > API_KEY > 配置文件
-                    let env_key = std::env::var("ABV_API_KEY")
-                        .or_else(|_| std::env::var("API_KEY"))
-                        .ok();
-
-                    if let Some(key) = env_key {
-                        if !key.trim().is_empty() {
-                            info!("Using API Key from environment variable");
-                            config.proxy.api_key = key;
-                            modified = true;
-                        }
-                    }
-
-                    // [NEW] 支持通过环境变量注入 Web UI 密码
-                    // 优先级：ABV_WEB_PASSWORD > WEB_PASSWORD > 配置文件
-                    let env_web_password = std::env::var("ABV_WEB_PASSWORD")
-                        .or_else(|_| std::env::var("WEB_PASSWORD"))
-                        .ok();
-
-                    if let Some(pwd) = env_web_password {
-                        if !pwd.trim().is_empty() {
-                            info!("Using Web UI Password from environment variable");
-                            config.proxy.admin_password = Some(pwd);
-                            modified = true;
-                        }
-                    }
-
-                    // [NEW] 支持通过环境变量注入鉴权模式
-                    // 优先级：ABV_AUTH_MODE > AUTH_MODE > 配置文件
-                    let env_auth_mode = std::env::var("ABV_AUTH_MODE")
-                        .or_else(|_| std::env::var("AUTH_MODE"))
-                        .ok();
-
-                    if let Some(mode_str) = env_auth_mode {
-                        let mode = match mode_str.to_lowercase().as_str() {
-                            "off" => Some(crate::proxy::ProxyAuthMode::Off),
-                            "strict" => Some(crate::proxy::ProxyAuthMode::Strict),
-                            "all_except_health" => Some(crate::proxy::ProxyAuthMode::AllExceptHealth),
-                            "auto" => Some(crate::proxy::ProxyAuthMode::Auto),
-                            _ => {
-                                warn!("Invalid AUTH_MODE: {}, ignoring", mode_str);
-                                None
-                            }
-                        };
-                        if let Some(m) = mode {
-                            info!("Using Auth Mode from environment variable: {:?}", m);
-                            config.proxy.auth_mode = m;
-                            modified = true;
-                        }
-                    }
-
-                    info!("--------------------------------------------------");
-                    info!("🚀 Headless mode proxy service starting...");
-                    info!("📍 Port: {}", config.proxy.port);
-                    info!("🔑 Current API Key: {}", config.proxy.api_key);
-                    if let Some(ref pwd) = config.proxy.admin_password {
-                        info!("🔐 Web UI Password: {}", pwd);
-                    } else {
-                        info!("🔐 Web UI Password: (Same as API Key)");
-                    }
-                    info!("💡 Tips: You can use these keys to login to Web UI and access AI APIs.");
-                    info!("💡 Search docker logs or grep gui_config.json to find them.");
-                    info!("--------------------------------------------------");
-
-                    // [FIX #1460] Persist environment overrides to ensure they are visible in Web UI/load_config
-                    if modified {
-                        if let Err(e) = modules::config::save_app_config(&config) {
-                            error!("Failed to persist environment overrides: {}", e);
-                        } else {
-                            info!("Environment overrides persisted to gui_config.json");
-                        }
-                    }
-
-                    // Start proxy service
-                    if let Err(e) = commands::proxy::internal_start_proxy_service(
-                        config.proxy,
-                        &proxy_state,
-                        crate::modules::integration::SystemManager::Headless,
-                        cf_state.clone(),
-                    ).await {
-                        error!("Failed to start proxy service in headless mode: {}", e);
-                        std::process::exit(1);
-                    }
-
-                    info!("Headless proxy service is running.");
-
-                    // Start smart scheduler
-                    modules::scheduler::start_scheduler(None, proxy_state.clone());
-                    info!("Smart scheduler started in headless mode.");
-                }
-                Err(e) => {
-                    error!("Failed to load config for headless mode: {}", e);
-                    std::process::exit(1);
+        
+        // Set ABV_DIST_PATH for static file serving if not already set
+        if std::env::var("ABV_DIST_PATH").is_err() {
+            // Try to find dist directory relative to executable or current dir
+            let possible_paths = [
+                "../dist".to_string(),
+                "./dist".to_string(),
+                "dist".to_string(),
+            ];
+            
+            for path in &possible_paths {
+                if std::path::Path::new(path).exists() {
+                    info!("Setting ABV_DIST_PATH to: {}", path);
+                    std::env::set_var("ABV_DIST_PATH", path);
+                    break;
                 }
             }
-
-            // Wait for Ctrl-C
-            tokio::signal::ctrl_c().await.ok();
-            info!("Headless mode shutting down");
-        });
-        return;
+        }
+        
+        run_headless();
+    } else {
+        info!("Starting in GUI mode...");
+        run_gui();
     }
+}
 
+fn run_headless() {
+    let tray_enabled = should_enable_tray();
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {
+            // Headless mode: do nothing on second instance
+        }))
+        .manage(commands::proxy::ProxyServiceState::new())
+        .manage(commands::cloudflared::CloudflaredState::new())
+        .manage(AppRuntimeFlags { tray_enabled })
+        .setup(|app| {
+            info!("Headless setup starting...");
+
+            // Initialize log bridge
+            modules::log_bridge::init_log_bridge(app.handle().clone());
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Initialize states
+                let proxy_state = commands::proxy::ProxyServiceState::new();
+                let cf_state = Arc::new(commands::cloudflared::CloudflaredState::new());
+
+                // Load config
+                match modules::config::load_app_config() {
+                    Ok(mut config) => {
+                        let mut modified = false;
+                        // Headless/docker 默认允许 LAN 访问（绑定 0.0.0.0）
+                        let bind_local_only = std::env::var("ABV_BIND_LOCAL_ONLY")
+                            .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                            .unwrap_or(false);
+                        if bind_local_only {
+                            config.proxy.allow_lan_access = false;
+                            modified = true;
+                        } else {
+                            config.proxy.allow_lan_access = true;
+                        }
+
+                        // Force auth mode to AllExceptHealth in headless mode
+                        if matches!(config.proxy.auth_mode, crate::proxy::ProxyAuthMode::Off | crate::proxy::ProxyAuthMode::Auto) {
+                            info!("Headless mode: Forcing auth_mode to AllExceptHealth for Web UI security");
+                            config.proxy.auth_mode = crate::proxy::ProxyAuthMode::AllExceptHealth;
+                            modified = true;
+                        }
+
+                        // Support API Key from environment
+                        let env_key = std::env::var("ABV_API_KEY")
+                            .or_else(|_| std::env::var("API_KEY"))
+                            .ok();
+                        if let Some(key) = env_key {
+                            if !key.trim().is_empty() {
+                                info!("Using API Key from environment variable");
+                                config.proxy.api_key = key;
+                                modified = true;
+                            }
+                        }
+
+                        // Support Web UI Password from environment
+                        let env_web_password = std::env::var("ABV_WEB_PASSWORD")
+                            .or_else(|_| std::env::var("WEB_PASSWORD"))
+                            .ok();
+                        if let Some(pwd) = env_web_password {
+                            if !pwd.trim().is_empty() {
+                                info!("Using Web UI Password from environment variable");
+                                config.proxy.admin_password = Some(pwd);
+                                modified = true;
+                            }
+                        }
+
+                        info!("--------------------------------------------------");
+                        info!("🚀 Headless mode proxy service starting...");
+                        info!("📍 Port: {}", config.proxy.port);
+                        info!("🔑 Current API Key: {}", config.proxy.api_key);
+                        if let Some(ref pwd) = config.proxy.admin_password {
+                            info!("🔐 Web UI Password: {}", pwd);
+                        } else {
+                            info!("🔐 Web UI Password: (Same as API Key)");
+                        }
+                        info!("💡 Tips: You can use these keys to login to Web UI and access AI APIs.");
+                        info!("--------------------------------------------------");
+
+                        // Persist environment overrides
+                        if modified {
+                            if let Err(e) = modules::config::save_app_config(&config) {
+                                error!("Failed to persist environment overrides: {}", e);
+                            } else {
+                                info!("Environment overrides persisted to gui_config.json");
+                            }
+                        }
+
+                        // Save values before moving config.proxy
+                        let port = config.proxy.port;
+                        let bind_local_only = !config.proxy.allow_lan_access;
+
+                        // Start proxy service
+                        if let Err(e) = commands::proxy::internal_start_proxy_service(
+                            config.proxy,
+                            &proxy_state,
+                            crate::modules::integration::SystemManager::Headless,
+                            cf_state.clone(),
+                        ).await {
+                            error!("Failed to start proxy service in headless mode: {}", e);
+                            std::process::exit(1);
+                        }
+
+                        info!("Headless proxy service is running.");
+
+                        // Start smart scheduler
+                        modules::scheduler::start_scheduler(Some(handle.clone()), proxy_state.clone());
+                        info!("Smart scheduler started in headless mode.");
+
+                        // Auto-open browser after service starts
+                        tokio::spawn(async move {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                            
+                            let url = if bind_local_only {
+                                format!("http://127.0.0.1:{}", port)
+                            } else {
+                                format!("http://localhost:{}", port)
+                            };
+                            
+                            info!("Opening browser at {}", url);
+                            
+                            #[cfg(target_os = "macos")]
+                            let _ = std::process::Command::new("open").arg(&url).spawn();
+                            
+                            #[cfg(target_os = "linux")]
+                            let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+                            
+                            #[cfg(target_os = "windows")]
+                            let _ = std::process::Command::new("cmd").args(["/C", "start", &url]).spawn();
+                        });
+                    }
+                    Err(e) => {
+                        error!("Failed to load config for headless mode: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            });
+
+            // Create tray for headless mode
+            let runtime_flags = app.state::<AppRuntimeFlags>();
+            if runtime_flags.tray_enabled {
+                modules::tray::create_tray(app.handle())?;
+                info!("Tray created for headless mode");
+            }
+
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
+fn run_gui() {
     let tray_enabled = should_enable_tray();
 
     tauri::Builder::default()

@@ -30,8 +30,22 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let switch_next = MenuItem::with_id(app, "switch_next", &texts.switch_next, true, None::<&str>)?;
     let refresh_curr = MenuItem::with_id(app, "refresh_curr", &texts.refresh_current, true, None::<&str>)?;
     
-    // System functions
-    let show_i = MenuItem::with_id(app, "show", &texts.show_window, true, None::<&str>)?;
+    // System functions - 改为"打开网页"
+    let open_web_text = match config.language.as_str() {
+        "zh" | "zh-CN" => "打开网页",
+        "zh-TW" => "打開網頁",
+        "ja" => "ウェブを開く",
+        "ko" => "웹페이지 열기",
+        "es" => "Abrir Web",
+        "pt" => "Abrir Web",
+        "ru" => "Открыть веб",
+        "ar" => "فتح الويب",
+        "tr" => "Web'i Aç",
+        "vi" => "Mở Web",
+        "my" => "Buka Web",
+        _ => "Open Web",
+    };
+    let show_i = MenuItem::with_id(app, "show", open_web_text, true, None::<&str>)?;
     let quit_i = MenuItem::with_id(app, "quit", &texts.quit, true, None::<&str>)?;
     
     let sep1 = PredefinedMenuItem::separator(app)?;
@@ -51,6 +65,10 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         &quit_i,
     ])?;
 
+    // Get port for opening web
+    let port = config.proxy.port;
+    let bind_local_only = !config.proxy.allow_lan_access;
+
     // 5. Build tray icon
     let _ = TrayIconBuilder::with_id("main")
         .menu(&menu)
@@ -60,12 +78,21 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             let app_handle = app.clone();
             match event.id().as_ref() {
                 "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                        #[cfg(target_os = "macos")]
-                        app.set_activation_policy(tauri::ActivationPolicy::Regular).unwrap_or(());
-                    }
+                    // 打开网页而不是显示窗口
+                    let url = if bind_local_only {
+                        format!("http://127.0.0.1:{}", port)
+                    } else {
+                        format!("http://localhost:{}", port)
+                    };
+                    
+                    #[cfg(target_os = "macos")]
+                    let _ = std::process::Command::new("open").arg(&url).spawn();
+                    
+                    #[cfg(target_os = "linux")]
+                    let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+                    
+                    #[cfg(target_os = "windows")]
+                    let _ = std::process::Command::new("cmd").args(["/C", "start", &url]).spawn();
                 }
                 "quit" => {
                     // 先停止 Admin Server，避免僵尸 socket
@@ -139,19 +166,28 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 _ => {}
             }
         })
-        .on_tray_icon_event(|tray, event| {
+        .on_tray_icon_event(move |tray, event| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 ..
             } = event
             {
+               // 左键点击也打开网页
                let app = tray.app_handle();
-               if let Some(window) = app.get_webview_window("main") {
-                   let _ = window.show();
-                   let _ = window.set_focus();
-                   #[cfg(target_os = "macos")]
-                   app.set_activation_policy(tauri::ActivationPolicy::Regular).unwrap_or(());
-               }
+               let url = if bind_local_only {
+                   format!("http://127.0.0.1:{}", port)
+               } else {
+                   format!("http://localhost:{}", port)
+               };
+               
+               #[cfg(target_os = "macos")]
+               let _ = std::process::Command::new("open").arg(&url).spawn();
+               
+               #[cfg(target_os = "linux")]
+               let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+               
+               #[cfg(target_os = "windows")]
+               let _ = std::process::Command::new("cmd").args(["/C", "start", &url]).spawn();
             }
         })
         .build(app)?;

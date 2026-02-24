@@ -8,7 +8,12 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:debug": "RUST_LOG=debug npm run tauri dev"
+    "tauri:debug": "RUST_LOG=debug npm run tauri dev",
+    "headless": "npm run build && cd src-tauri && cargo run --release",
+    "headless:dev": "npm run build && cd src-tauri && cargo run",
+    "headless:quick": "cd src-tauri && cargo run --release",
+    "build:headless": "npm run build && cd src-tauri && cargo build --release",
+    "build:headless:mac": "npm run build && tauri build --bundles dmg"
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
